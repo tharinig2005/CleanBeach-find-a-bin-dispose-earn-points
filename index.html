@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CleanBeach – Scan. Find. Dispose. Protect.</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--dark:#124d1f;--green:#2f7d32;--lime:#8aa83b;--orange:#f08a1c;--red:#d32f2f;--blue:#1e9be0;--bg:#f6f8f4;--ink:#1c2a1f}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:var(--bg);color:var(--ink);max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:90px}
+header{background:var(--dark);color:#fff;padding:16px 18px}
+header h1{font-size:20px}
+header p{font-size:12px;opacity:.8;margin-top:2px}
+.view{display:none;padding:16px}
+.view.active{display:block}
+.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.btn{display:block;width:100%;border:0;border-radius:14px;background:var(--dark);color:#fff;padding:14px;font-size:16px;font-weight:600;cursor:pointer}
+.btn.small{display:inline-block;width:auto;padding:8px 14px;font-size:13px;border-radius:10px}
+.btn.alt{background:#e7efe3;color:var(--dark)}
+.btn:disabled{opacity:.5}
+input{width:100%;padding:12px;border:1px solid #d5ddd0;border-radius:12px;font-size:15px;margin-bottom:10px}
+.points{font-size:40px;font-weight:800;color:var(--green)}
+.muted{color:#6b7a6e;font-size:13px}
+.tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#fff}
+.Available{background:var(--green)}.Nearly{background:var(--orange)}.Full{background:var(--red)}
+.bar{height:8px;border-radius:8px;background:#e8ece5;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#map{height:55vh;border-radius:16px;margin-bottom:14px}
+nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--dark);display:flex;justify-content:space-around;align-items:center;padding:10px 0 14px;border-radius:20px 20px 0 0;z-index:1000}
+nav button{background:none;border:0;color:#cfe3cf;font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:20px}
+nav button.on{color:#fff;font-weight:700}
+nav .mid{background:#fff;color:var(--dark);width:56px;height:56px;border-radius:50%;margin-top:-30px;border:4px solid var(--dark);justify-content:center}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;z-index:2000}
+#sheet.open{display:flex}
+#sheetBody{background:#fff;width:100%;max-width:480px;margin:0 auto;border-radius:22px 22px 0 0;padding:20px}
+.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:12px;z-index:3000;font-size:14px;display:none;max-width:90%}
+.qrgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.qrcard{background:#fff;border-radius:14px;padding:12px;text-align:center;font-size:13px}
+.qrcard div.q{display:flex;justify-content:center;margin-bottom:8px}
+.badge{display:inline-block;background:#e7efe3;color:var(--dark);padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px}
+.sim{background:#fff6e0;border:1px dashed var(--orange);padding:8px 12px;border-radius:10px;font-size:12px;margin-bottom:12px}
+@media print{header,nav,.noprint,.sim{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌴 CleanBeach</h1>
+  <p>Scan. Find. Dispose. Protect.</p>
+</header>
+
+<!-- LOGIN / WELCOME -->
+<section class="view" id="v-login">
+  <div class="card" style="text-align:center;margin-top:30px">
+    <div style="font-size:60px">🌳</div>
+    <h2 style="margin:8px 0">Welcome to CleanBeach</h2>
+    <p class="muted" style="margin-bottom:14px">Find a bin. Use it. Earn points.</p>
+    <input id="nameInput" placeholder="Enter your name">
+    <button class="btn" onclick="login()">Start</button>
+  </div>
+</section>
+
+<!-- HOME -->
+<section class="view" id="v-home">
+  <div class="card">
+    <p class="muted">Hi <b id="hiName"></b> 👋</p>
+    <div class="points"><span id="homePts">0</span> <span style="font-size:16px">points</span></div>
+    <span class="badge" id="homeLevel"></span>
+  </div>
+  <button class="btn" style="padding:20px;font-size:18px;margin-bottom:14px" onclick="findNearest()">📍 Find a Dustbin</button>
+  <div class="card">
+    <h3 style="margin-bottom:8px">How it works</h3>
+    <p class="muted">1. Tap <b>Find a Dustbin</b> or scan the QR code on a bin.<br>
+       2. Put your waste in the bin.<br>
+       3. Tap <b>I disposed my waste here</b> and get 10 points.</p>
+  </div>
+  <div class="card">
+    <div class="row"><h3>Bins near you</h3><button class="btn small alt" onclick="simulate()">🔄 Simulate update</button></div>
+    <div class="sim">Demo data: bin locations and fill levels are SAMPLES, not real. Live fill levels need real sensors.</div>
+    <div id="homeList"></div>
+  </div>
+</section>
+
+<!-- MAP -->
+<section class="view" id="v-map">
+  <div id="map"></div>
+  <div id="mapList"></div>
+</section>
+
+<!-- REWARDS -->
+<section class="view" id="v-rewards">
+  <div class="card" style="text-align:center">
+    <p class="muted">Your points</p>
+    <div class="points" id="rwPts">0</div>
+    <span class="badge" id="rwLevel"></span>
+    <div class="bar"><i id="rwBar" style="background:var(--green);width:0"></i></div>
+    <p class="muted" id="rwNext"></p>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:10px">Rewards (demo)</h3>
+    <div class="row" style="margin-bottom:10px"><span>🥤 Free coconut water</span><button class="btn small" onclick="redeem(50,'Free coconut water')">50 pts</button></div>
+    <div class="row" style="margin-bottom:10px"><span>👜 Reusable cloth bag</span><button class="btn small" onclick="redeem(150,'Reusable cloth bag')">150 pts</button></div>
+    <div class="row"><span>🏅 Beach Hero certificate</span><button class="btn small" onclick="redeem(300,'Beach Hero certificate')">300 pts</button></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:8px">Settings</h3>
+    <label class="muted"><input type="checkbox" id="demoMode" style="width:auto;margin:0 6px 0 0" checked onchange="saveDemo()"> Demo mode (skip the “be near the bin” check)</label>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:8px">History</h3>
+    <div id="history" class="muted">No activity yet.</div>
+  </div>
+  <button class="btn alt" onclick="logout()">Log out</button>
+</section>
+
+<!-- QR CODES -->
+<section class="view" id="v-qr">
+  <div class="card noprint">
+    <h3>QR codes for bins</h3>
+    <p class="muted" style="margin:6px 0 10px">Print these and stick one on each bin. Scanning with any phone camera opens that bin in the app. The app must be hosted online (e.g. Netlify or GitHub Pages) for this to work from other phones.</p>
+    <button class="btn small" onclick="window.print()">🖨 Print</button>
+  </div>
+  <div class="qrgrid" id="qrGrid"></div>
+</section>
+
+<!-- Bin detail sheet -->
+<div id="sheet" onclick="if(event.target===this)closeSheet()"><div id="sheetBody"></div></div>
+<div class="toast" id="toast"></div>
+
+<nav id="nav">
+  <button data-v="home" onclick="show('home')"><span>🏠</span>Home</button>
+  <button data-v="map" onclick="show('map')"><span>🗺️</span>Map</button>
+  <button class="mid" onclick="findNearest()"><span>🗑️</span></button>
+  <button data-v="rewards" onclick="show('rewards')"><span>🎁</span>Rewards</button>
+  <button data-v="qr" onclick="show('qr')"><span>🔳</span>QR</button>
+</nav>
+
+<script>
+/* ---------- SAMPLE DATA (replace with verified real locations) ---------- */
+const BINS = [
+  {id:'B1', name:'Lighthouse Gate',     lat:13.0418, lng:80.2785, fill:25},
+  {id:'B2', name:'Gandhi Statue Walk',  lat:13.0500, lng:80.2824, fill:62},
+  {id:'B3', name:'Food Stalls Row',     lat:13.0560, lng:80.2840, fill:93},
+  {id:'B4', name:'Kids Play Area',      lat:13.0604, lng:80.2850, fill:40},
+  {id:'B5', name:'South Entrance',      lat:13.0372, lng:80.2776, fill:75},
+  {id:'B6', name:'Fishing Village Side',lat:13.0660, lng:80.2865, fill:15}
+];
+const POINTS_PER_DISPOSAL = 10;
+const COOLDOWN_MIN = 30;      // one reward per bin every 30 minutes
+const MAX_DISTANCE_M = 60;    // must be within 60 m of the bin (when demo mode is off)
+const LEVELS = [{n:'Beach Buddy',min:0},{n:'Wave Guardian',min:100},{n:'Ocean Hero',min:300}];
+
+/* ---------- Storage helpers ---------- */
+const store = {
+  get(k,d){try{const v=localStorage.getItem('cb_'+k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem('cb_'+k,JSON.stringify(v))}catch(e){}}
+};
+let user = store.get('user',null);
+let points = store.get('points',0);
+let history = store.get('history',[]);
+let lastUse = store.get('lastUse',{});
+let demo = store.get('demo',true);
+
+/* ---------- Helpers ---------- */
+function status(f){return f>=90?'Full':f>=60?'Nearly':'Available'}
+function statusLabel(f){return f>=90?'Full':f>=60?'Nearly Full':'Available'}
+function color(f){return f>=90?'#d32f2f':f>=60?'#f08a1c':'#2f7d32'}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',2800)}
+function dist(a,b,c,d){const R=6371000,r=x=>x*Math.PI/180;
+  const dLat=r(c-a),dLng=r(d-b);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h))}
+function level(p){let l=LEVELS[0];for(const x of LEVELS)if(p>=x.min)l=x;return l}
+function binCard(b,extra=''){
+  return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openBin('${b.id}')">
+    <div class="row"><b>${b.name}</b><span class="tag ${status(b.fill)}">${statusLabel(b.fill)}</span></div>
+    <div class="bar"><i style="width:${b.fill}%;background:${color(b.fill)}"></i></div>
+    <div class="row muted"><span>${b.fill}% full (sample)</span><span>${extra}</span></div></div>`;
+}
+
+/* ---------- Navigation ---------- */
+let map, markers = {}, userPos = null;
+function show(v){
+  if(!user){v='login'}
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.getElementById('v-'+v).classList.add('active');
+  document.getElementById('nav').style.display = v==='login'?'none':'flex';
+  document.querySelectorAll('nav button[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  if(v==='map'){initMap();setTimeout(()=>map.invalidateSize(),50)}
+  if(v==='qr')buildQR();
+  render();
+  window.scrollTo(0,0);
+}
+function login(){
+  const n=document.getElementById('nameInput').value.trim();
+  if(!n){toast('Please enter your name');return}
+  user=n;store.set('user',n);show('home');handleHash();
+}
+function logout(){user=null;store.set('user',null);show('login')}
+
+/* ---------- Rendering ---------- */
+function render(){
+  document.getElementById('hiName').textContent=user||'';
+  document.getElementById('homePts').textContent=points;
+  document.getElementById('homeLevel').textContent=level(points).n;
+  document.getElementById('rwPts').textContent=points;
+  document.getElementById('rwLevel').textContent=level(points).n;
+  const idx=LEVELS.findIndex(l=>l.n===level(points).n), nx=LEVELS[idx+1];
+  document.getElementById('rwBar').style.width = nx?Math.min(100,(points-LEVELS[idx].min)/(nx.min-LEVELS[idx].min)*100)+'%':'100%';
+  document.getElementById('rwNext').textContent = nx?`${nx.min-points} points to ${nx.n}`:'Top level reached 🎉';
+  document.getElementById('demoMode').checked=demo;
+  const withD = BINS.map(b=>({...b,d:userPos?Math.round(dist(userPos.lat,userPos.lng,b.lat,b.lng)):null}));
+  if(userPos)withD.sort((a,b)=>a.d-b.d);
+  const html=withD.map(b=>binCard(b,b.d!==null?b.d+' m away':'')).join('');
+  document.getElementById('homeList').innerHTML=html;
+  document.getElementById('mapList').innerHTML=html;
+  document.getElementById('history').innerHTML = history.length
+    ? history.slice().reverse().slice(0,15).map(h=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee"><span>${h.text}</span><span>${h.pts>0?'+':''}${h.pts}</span></div>`).join('')
+    : 'No activity yet.';
+  refreshMarkers();
+}
+
+/* ---------- Map ---------- */
+function initMap(){
+  if(map)return;
+  map=L.map('map').setView([13.052,80.282],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+  refreshMarkers();
+}
+function refreshMarkers(){
+  if(!map)return;
+  BINS.forEach(b=>{
+    if(markers[b.id])map.removeLayer(markers[b.id]);
+    markers[b.id]=L.circleMarker([b.lat,b.lng],{radius:11,color:'#fff',weight:2,fillColor:color(b.fill),fillOpacity:1})
+      .addTo(map).on('click',()=>openBin(b.id));
+  });
+  if(userPos){
+    if(markers.me)map.removeLayer(markers.me);
+    markers.me=L.circleMarker([userPos.lat,userPos.lng],{radius:8,color:'#fff',weight:3,fillColor:'#1e9be0',fillOpacity:1}).addTo(map);
+  }
+}
+
+/* ---------- Find nearest available bin ---------- */
+function findNearest(){
+  if(!user){show('login');return}
+  const done=()=>{
+    let list=BINS.filter(b=>b.fill<90);
+    if(userPos)list.sort((a,b)=>dist(userPos.lat,userPos.lng,a.lat,a.lng)-dist(userPos.lat,userPos.lng,b.lat,b.lng));
+    if(!list.length){toast('All sample bins are full!');return}
+    show('map');
+    const b=list[0];
+    setTimeout(()=>{map.setView([b.lat,b.lng],16);openBin(b.id)},120);
+  };
+  if(!navigator.geolocation){toast('Location not available – showing the first free bin');done();return}
+  navigator.geolocation.getCurrentPosition(
+    p=>{userPos={lat:p.coords.latitude,lng:p.coords.longitude};done()},
+    ()=>{toast('Location blocked – showing sample bins');done()},
+    {enableHighAccuracy:true,timeout:8000});
+}
+
+/* ---------- Bin detail + rewards ---------- */
+function openBin(id){
+  const b=BINS.find(x=>x.id===id); if(!b)return;
+  const canUse=b.fill<90;
+  document.getElementById('sheetBody').innerHTML=`
+    <div class="row"><h2>${b.name}</h2><span class="tag ${status(b.fill)}">${statusLabel(b.fill)}</span></div>
+    <div class="bar"><i style="width:${b.fill}%;background:${color(b.fill)}"></i></div>
+    <p class="muted" style="margin-bottom:12px">${b.fill}% full · simulated status · Bin code ${b.id}</p>
+    <button class="btn" ${canUse?'':'disabled'} onclick="claim('${b.id}')">✅ I disposed my waste here (+${POINTS_PER_DISPOSAL})</button>
+    ${canUse?'':'<p class="muted" style="margin-top:8px">This bin is full. Please use another bin.</p>'}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <a class="btn small alt" style="text-decoration:none;flex:1;text-align:center" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}">➡️ Directions</a>
+      <button class="btn small alt" style="flex:1" onclick="reportFull('${b.id}')">🚩 Report full</button>
+      <button class="btn small alt" style="flex:1" onclick="closeSheet()">Close</button>
+    </div>`;
+  document.getElementById('sheet').classList.add('open');
+}
+function closeSheet(){document.getElementById('sheet').classList.remove('open');if(location.hash)history_replace()}
+function history_replace(){try{window.history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+
+function award(b){
+  points+=POINTS_PER_DISPOSAL;
+  lastUse[b.id]=Date.now();
+  history.push({text:'Disposed at '+b.name,pts:POINTS_PER_DISPOSAL});
+  store.set('points',points);store.set('lastUse',lastUse);store.set('history',history);
+  b.fill=Math.min(100,b.fill+5); // a used bin gets a bit fuller (simulation)
+  closeSheet();render();
+  toast('🎉 +'+POINTS_PER_DISPOSAL+' points! Thank you for keeping the beach clean.');
+}
+function claim(id){
+  const b=BINS.find(x=>x.id===id);
+  const last=lastUse[id];
+  if(last && Date.now()-last < COOLDOWN_MIN*60000){
+    const left=Math.ceil((COOLDOWN_MIN*60000-(Date.now()-last))/60000);
+    toast('You already earned points here. Try again in '+left+' min.');return;
+  }
+  if(demo){award(b);return}
+  if(!navigator.geolocation){toast('Location needed to verify you are at the bin');return}
+  navigator.geolocation.getCurrentPosition(p=>{
+    userPos={lat:p.coords.latitude,lng:p.coords.longitude};
+    const d=dist(userPos.lat,userPos.lng,b.lat,b.lng);
+    if(d>MAX_DISTANCE_M){toast('You are '+Math.round(d)+' m away. Go to the bin first.');return}
+    award(b);
+  },()=>toast('Please allow location to earn points'),{enableHighAccuracy:true,timeout:8000});
+}
+function reportFull(id){
+  const b=BINS.find(x=>x.id===id);
+  b.fill=100;
+  history.push({text:'Reported full: '+b.name,pts:0});store.set('history',history);
+  closeSheet();render();toast('Thanks! Staff would be alerted in a real system.');
+}
+function redeem(cost,name){
+  if(points<cost){toast('You need '+(cost-points)+' more points');return}
+  points-=cost;history.push({text:'Redeemed: '+name,pts:-cost});
+  store.set('points',points);store.set('history',history);render();toast('Redeemed: '+name+' (demo)');
+}
+function saveDemo(){demo=document.getElementById('demoMode').checked;store.set('demo',demo)}
+
+/* ---------- Simulated live status ---------- */
+function simulate(){
+  BINS.forEach(b=>{b.fill=Math.max(5,Math.min(100,b.fill+Math.round((Math.random()-0.35)*30)))});
+  render();toast('Sample fill levels updated');
+}
+
+/* ---------- QR codes ---------- */
+let qrBuilt=false;
+function buildQR(){
+  if(qrBuilt)return;qrBuilt=true;
+  const base=location.origin+location.pathname;
+  const grid=document.getElementById('qrGrid');
+  BINS.forEach(b=>{
+    const c=document.createElement('div');c.className='qrcard';
+    c.innerHTML=`<div class="q"></div><b>${b.name}</b><br><span class="muted">Code ${b.id}</span>`;
+    grid.appendChild(c);
+    new QRCode(c.querySelector('.q'),{text:base+'#bin='+b.id,width:130,height:130});
+  });
+}
+
+/* ---------- Open a bin from QR link (#bin=B2) ---------- */
+function handleHash(){
+  const m=location.hash.match(/bin=([A-Za-z0-9]+)/);
+  if(m && user){show('home');openBin(m[1].toUpperCase())}
+}
+window.addEventListener('hashchange',handleHash);
+
+/* ---------- Start ---------- */
+show(user?'home':'login');
+handleHash();
+</script>
+</body>
+</html>
